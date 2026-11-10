@@ -2,7 +2,7 @@ services:
   - type: web
     name: zemavoice-private-beta
     runtime: docker
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: APP_ENV
