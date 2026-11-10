@@ -11,11 +11,13 @@ from fastapi import FastAPI, Header, HTTPException, Depends, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field
+from auth import router as auth_router
 
 PROD = os.getenv('APP_ENV', 'development') == 'production'
 app = FastAPI(title='ZemaVoice AI API', version='0.3.0', docs_url=None if PROD else '/docs', redoc_url=None, openapi_url=None if PROD else '/openapi.json')
 BASE = 'https://api.addisassistant.com'
 PUBLIC_DIR = Path(__file__).resolve().parent / 'public'
+app.include_router(auth_router)
 
 if os.getenv('ALLOWED_HOSTS'):
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=[h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h.strip()])
@@ -60,6 +62,10 @@ class SpeechRequest(BaseModel):
 @app.get('/')
 def index():
     return FileResponse(PUBLIC_DIR / 'index.html')
+
+@app.get('/account.js')
+def account_script():
+    return FileResponse(PUBLIC_DIR / 'account.js', media_type='application/javascript')
 
 @app.get('/health')
 def health():
