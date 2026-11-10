@@ -1,0 +1,25 @@
+{
+  "datasets": [
+    {
+      "id": "mozilla-common-voice-amharic",
+      "name": "Mozilla Common Voice Scripted Speech 27.0 - Amharic",
+      "homepage": "https://commonvoice.mozilla.org/",
+      "license": "CC0-1.0",
+      "language": "am",
+      "status": "approved-for-ingestion-subject-to-terms",
+      "notes": "Download from Mozilla Data Collective; preserve speaker split and metadata. Dataset primarily collected for ASR."
+    },
+    {
+      "id": "google-fleurs-amharic",
+      "name": "Google FLEURS Amharic",
+      "homepage": "https://huggingface.co/datasets/google/fleurs",
+      "huggingface_id": "google/fleurs",
+      "config": "am_et",
+      "license": "CC-BY-4.0",
+      "language": "am",
+      "status": "approved-for-ingestion-subject-to-terms",
+      "notes": "Keep attribution and source metadata; check per-file rights, text/audio alignment, and voice quality."
+    }
+  ],
+  "policy": "Only ingest datasets whose licenses and platform access terms permit the intended use. Do not train a voice clone of an identifiable speaker without consent. Do not mix validation/test into training."
+}
