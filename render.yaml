@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: zemavoice-private-beta
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: ADDIS_API_KEY
+        sync: false
+      - key: ZEMAVOICE_API_KEY
+        generateValue: true
+      - key: HOURLY_GENERATION_LIMIT
+        value: '20'
