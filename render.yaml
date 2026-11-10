@@ -9,6 +9,8 @@ services:
         value: production
       - key: ADDIS_API_KEY
         sync: false
+      - key: ZEMAVOICE_SESSION_SECRET
+        generateValue: true
       - key: ZEMAVOICE_API_KEY
         generateValue: true
       - key: HOURLY_GENERATION_LIMIT
