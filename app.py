@@ -47,7 +47,7 @@ async def security_headers(request: Request, call_next):
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Cache-Control'] = 'no-store'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseapp.com https://*.firebaseapp.com; frame-src https://accounts.google.com https://zemavoice-ai.firebaseapp.com; media-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     if PROD:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
@@ -63,9 +63,9 @@ class SpeechRequest(BaseModel):
 def index():
     return FileResponse(PUBLIC_DIR / 'index.html')
 
-@app.get('/account.js')
-def account_script():
-    return FileResponse(PUBLIC_DIR / 'account.js', media_type='application/javascript')
+@app.get('/firebase-auth.js')
+def firebase_auth_script():
+    return FileResponse(PUBLIC_DIR / 'firebase-auth.js', media_type='application/javascript')
 
 @app.get('/health')
 def health():
