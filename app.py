@@ -67,6 +67,14 @@ def index():
 def firebase_auth_script():
     return FileResponse(PUBLIC_DIR / 'firebase-auth.js', media_type='application/javascript')
 
+@app.get('/studio')
+def studio():
+    return FileResponse(PUBLIC_DIR / 'studio.html')
+
+@app.get('/studio.js')
+def studio_script():
+    return FileResponse(PUBLIC_DIR / 'studio.js', media_type='application/javascript')
+
 @app.get('/health')
 def health():
     return {'service': 'ZemaVoice AI', 'status': 'ok', 'version': '0.3.0'}
