@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt && useradd -m appuser
-COPY app.py auth.py ./
+COPY app.py auth.py lipsync_api.py ./
 COPY public ./public
 USER appuser
 EXPOSE 10000

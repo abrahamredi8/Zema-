@@ -33,3 +33,34 @@ pip install -r requirements.txt
 uvicorn app:app --reload
 ```
 See `.env.example` for environment variable names.
+
+## Video integration (prepared; GPU engine still required)
+
+`/video` provides upload, playback and MP4 download for private evaluation. It is separate
+from the existing energy-based mouth preview and does not change the speech routes.
+The home page now includes an installable web-app manifest. This is not an App Store submission.
+
+Configure these server-side secrets only after a compatible GPU service is running:
+
+- `LIPSYNC_ENGINE_URL`: HTTPS endpoint accepting multipart `video` and `audio` fields.
+- `LIPSYNC_ENGINE_KEY`: separate secret sent as a Bearer token to that endpoint.
+
+The upstream must validate/decode both media files, enforce duration and resource limits,
+render the video, and return HTTP 200 with `Content-Type: video/mp4`. The gateway caps
+uploads at 40 MiB, downloads at 100 MiB, does not follow redirects, and limits upstream
+waiting to five minutes. This synchronous beta route is for short tests; long renders need
+an asynchronous GPU queue with polling and durable storage before production use.
+
+Authenticated routes use the existing `x-zemavoice-key` header:
+
+- `GET /v1/lipsync/status` reports configuration only, not GPU health.
+- `POST /v1/lipsync/render` forwards multipart media to the configured engine.
+
+No engine URL is configured by this change. The v10 Colab renderer is not an HTTP service
+and cannot be connected merely by entering its notebook URL. Until a compatible GPU service
+is available, the page disables generation and explains that the engine is disconnected.
+Do not share the private beta key in Muse prompts. Use a secure credential field only if
+Muse supports a verified API integration. Existing LatentSync/InsightFace model dependencies
+have not been cleared for commercial use; keep this evaluation private.
+
+Validation: `python -m pytest -q`; `node --check public/video.js`.
