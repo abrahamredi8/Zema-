@@ -47,3 +47,21 @@ or public endpoint was provisioned. No credentials belong in repository content.
 A browser-local audio-volume tool is also implemented: preview and PCM WAV export,
 peak-limited gain, no speed/pitch change, no uploads, and no claim of denoising.
 The signed-in workspace still requires real browser testing before release.
+
+## Latest observed state
+
+- Actual 30-second synthetic T4 run completed, 750 frames, 1400.114 s; see performance notes.
+- The added v10 review cell embeds the completed 30-second MP4. A separate result
+  notebook copy and final visual playback review were not verified before browser
+  access failed. Existing source cells and voices were not edited.
+- A separate private UI preview notebook was created and saved:
+  https://colab.research.google.com/drive/1MJT3dD_uGOS7d-69gF1aYrLR9sgbDNQT
+  It bundles owned UI assets in Colab output, without forwarding a server or
+  loading Firebase sign-in. Its source is in tools/preview_bundle.py.
+- Browser checks verified tab switching, 20 profile cards, ten female-filter
+  results and one Mekdes search result. A duplicated planner library/header was
+  found and the embedded view streamlined. The latest streamlining needs a fresh
+  browser check. Pure DSP, WAV, API and synthetic media tests are automated.
+- The file chooser did not deliver the synthetic WAV in the bundled preview;
+  browser end-to-end audio processing/import/export remains unverified.
+- No live deployment, paid purchases, public endpoint, or external Muse connector.

@@ -1,4 +1,5 @@
 'use strict';
+if(new URLSearchParams(location.search).get('embedded')==='1')document.body.classList.add('embedded');
 const el=id=>document.getElementById(id);
 let ready=false, useJobs=false, resultUrl, monitoring=false;
 const storageKey='zemavoice-last-job';

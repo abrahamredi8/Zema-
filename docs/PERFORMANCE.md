@@ -41,3 +41,19 @@ The original source video and audio remain unchanged.
 A MuseTalk comparison has not run. No claims about its speed or quality on this GPU
 are made here. The website's actual connection to Muse is also not verified by
 these direct Colab tests.
+
+## Completed 30-second T4 result
+
+The synthetic stress run completed: renderer wall time **1400.114 seconds** (about
+23 minutes 20 seconds), **750 frames**, **30.0 seconds**, and audio correlation
+**0.9999590485009013** at the original timing. The resident model loaded once.
+The H.264/AAC output was 12,093,177 bytes. Fixture creation time is not included.
+This is a successful technical completion, not a real-time performance result or
+a full visual/natural-dialogue acceptance test. MuseTalk remains unbenchmarked.
+
+The video was embedded in an added review cell in the working v10 notebook:
+https://colab.research.google.com/drive/1BAfaz1OZAAvGdgp4H76tBq1EFiLOiuqS#scrollTo=teUccgsOtsxv
+
+A separate-copy save was attempted but not verified before browser access became
+unavailable. Existing working code cells and original voices were preserved; the
+added review cell was not removed. Do not describe the notebook as unchanged.
