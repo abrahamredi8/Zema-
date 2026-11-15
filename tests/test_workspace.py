@@ -49,14 +49,11 @@ def test_design_preview_is_not_a_login_or_production_route(monkeypatch):
     assert client.get('/preview.js').status_code==404
 
 
-def test_colab_preview_policy_never_applies_in_production(monkeypatch):
-    client=TestClient(app)
-    monkeypatch.setenv('APP_PREVIEW_COLAB','1')
-    preview=client.get('/preview')
-    assert preview.status_code==200
-    assert 'x-frame-options' not in preview.headers
-    assert 'https://colab.research.google.com' in preview.headers['content-security-policy']
-    monkeypatch.setattr('app.PROD',True)
-    assert client.get('/preview').status_code==404
-    assert client.get('/video').headers['x-frame-options']=='SAMEORIGIN'
-    assert 'https://colab.research.google.com' not in client.get('/video').headers['content-security-policy']
+
+def test_colab_bundle_has_no_live_signin_or_external_script_assets():
+    from tools.preview_bundle import build_preview
+    source=build_preview(Path(__file__).resolve().parents[1])
+    assert 'src="/firebase-auth.js"' not in source
+    assert '<script src=' not in source
+    assert 'Video engine connection' in source
+    assert 'srcdoc=' in source
