@@ -91,3 +91,13 @@ are never automatically retried after an ambiguous upload failure.
 Six automated checks cover both gateway modes, including async lifecycle, expired
 results, mismatched IDs, and filtering additional upstream fields. End-to-end GPU
 rendering and mobile browser interaction still require validation before release.
+
+### GPU worker implementation
+
+A separate private single-GPU worker is now provided in [gpu/README.md](gpu/README.md).
+It implements the async protocol with SQLite persistence, bounded queue admission,
+interrupted-job recovery, 24-hour retention and intermediate-file cleanup. The
+LatentSync renderer adapter preserves the existing v10 notebook and requires the
+operator's installed GPU environment. Nine tests pass, including an actual MP4
+upload→queue→download flow with FFmpeg substituting for AI. The new renderer has not
+yet run on a GPU; this is not a live deployment or a successful 30-second AI test.
