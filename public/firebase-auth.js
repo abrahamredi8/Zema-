@@ -31,6 +31,9 @@ function friendly(error){
 onAuthStateChanged(auth,user=>{
  $('accountForms').hidden=!!user;
  $('accountSignedIn').hidden=!user;
+ $('verifyEmail').hidden=!user||user.emailVerified;
+ window.ZemaVoiceSignedIn=!!user;
+ window.dispatchEvent(new CustomEvent('zemavoice-auth-state',{detail:{signedIn:!!user}}));
  if(user){$('accountUser').textContent='Signed in as '+(user.email||'ZemaVoice user');status(user.emailVerified?'Signed in.':'Signed in. Verify your email when possible.');}
  else{status('Sign in to your ZemaVoice account.');}
 });

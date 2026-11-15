@@ -47,7 +47,10 @@ async def security_headers(request: Request, call_next):
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Cache-Control'] = 'no-store'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseapp.com https://*.firebaseapp.com; frame-src https://accounts.google.com https://zemavoice-ai.firebaseapp.com; media-src 'self' blob: https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseapp.com https://*.firebaseapp.com; frame-src 'self' https://accounts.google.com https://zemavoice-ai.firebaseapp.com; media-src 'self' blob: https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    if request.url.path in ('/video', '/studio'):
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['Content-Security-Policy'] = response.headers['Content-Security-Policy'].replace("frame-ancestors 'none'", "frame-ancestors 'self'")
     if PROD:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
@@ -123,3 +126,12 @@ def video_studio():
 @app.get('/video.js')
 def video_script():
     return FileResponse(PUBLIC_DIR / 'video.js', media_type='application/javascript')
+
+# Explicit asset list prevents exposing source, credentials or arbitrary paths.
+@app.get('/{asset}')
+def workspace_asset(asset: str):
+    types = {'workspace.css':'text/css', 'workspace.js':'application/javascript',
+             'home.js':'application/javascript', 'voice-profiles.js':'application/javascript'}
+    if asset not in types:
+        raise HTTPException(404, 'Not found')
+    return FileResponse(PUBLIC_DIR / asset, media_type=types[asset])

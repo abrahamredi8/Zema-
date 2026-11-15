@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+import shutil
 
 
 def run(command, **kwargs):
@@ -39,15 +40,23 @@ def render(video, audio, output, profile="quality", infer=None):
     if streams[0]['width']*streams[0]['height'] > 3840*2160: raise ValueError('Input exceeds 4K')
     work = output.parent
     source, speech, wav, raw = [work/name for name in ('source25.mp4','speech.mp4','audio16.wav','generated.mp4')]
-    run(['ffmpeg','-y','-v','error','-i',video,'-an','-vf',"scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25",'-c:v','libx264','-crf','15',source])
+    stream = streams[0]
+    if stream.get('avg_frame_rate') == '25/1' and stream['width'] <= 1280 and stream['height'] <= 720 and stream['width']%2 == stream['height']%2 == 0:
+        shutil.copyfile(video, source)
+    else:
+        run(['ffmpeg','-y','-v','error','-i',video,'-an','-vf',"scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25",'-c:v','libx264','-crf','15',source])
     run(['ffmpeg','-y','-v','error','-i',audio,'-ar','16000','-ac','1',wav])
     pcm = np.frombuffer(subprocess.check_output(['ffmpeg','-v','error','-i',wav,'-f','s16le','pipe:1'],timeout=30),dtype=np.int16)
     audible = np.flatnonzero(np.abs(pcm.astype(np.int32))>80)
     last = (audible[-1]+1)/16000 if len(audible) else 0
-    count = math.ceil(aduration*25)
+    count = math.ceil(min(aduration,last+0.20)*25) if last else 0
     prepared = time.perf_counter()
     if last:
-        run(['ffmpeg','-y','-v','error','-i',source,'-frames:v',count,'-an','-c:v','libx264','-crf','15',speech])
+        if count < math.ceil(aduration*25):
+            trimmed = work/'speech16.wav'
+            run(['ffmpeg','-y','-v','error','-i',wav,'-t',str(count/25),'-c:a','pcm_s16le',trimmed])
+            wav = trimmed
+        speech = source
         if infer is not None:
             infer(speech, wav, raw, work/'temp', steps)
         else:

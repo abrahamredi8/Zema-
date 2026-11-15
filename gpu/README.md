@@ -82,3 +82,19 @@ It runs quality-cold, fast-warm, then quality-warm and saves three MP4s plus JSO
 measurements. Compare the two warm runs for profile speed, rather than confusing
 model loading time with inference speed. All outputs still require visual review.
 No speedup is asserted until this benchmark is measured on the target GPU.
+
+## Longer inputs and memory
+
+The in-process worker uses `gpu.render_long.render_long` for longer recordings.
+It renders five-second cores with 0.4 seconds of context and appends original silent
+footage after the recording. The final full audio is muxed once. Window boundaries
+still need visual review; overlap alone is not a guarantee of seamless motion.
+For the cold command renderer, use `python -m gpu.render_long` from the repository
+root with the same video/audio/output/profile arguments. Cold rendering loads the
+model per window, so the resident mode is recommended for throughput testing.
+
+Timing metrics now separate preprocessing, AI, and final assembly. Normalized 25 fps
+inputs avoid a redundant normalization encode, and trailing silence is omitted from
+the analysis audio sent to diffusion while the final original audio is preserved.
+An experimental detector-weight cache did not show a speed gain on the test clip;
+that extra patch was removed rather than made the default.

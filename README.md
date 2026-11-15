@@ -101,3 +101,14 @@ LatentSync renderer adapter preserves the existing v10 notebook and requires the
 operator's installed GPU environment. Nine tests pass, including an actual MP4
 upload→queue→download flow with FFmpeg substituting for AI. The new renderer has not
 yet run on a GPU; this is not a live deployment or a successful 30-second AI test.
+
+## Unified workspace
+
+The draft home page now groups narration, the 20-profile voice library, video tools,
+dialogue planning, local mouth timing and latest session downloads behind the existing
+Firebase account UI. The voice catalog is shared with the planner. The 20 entries
+are explicitly planned briefs; only voices returned by the connected provider can
+be selected for speech. See [implementation handoff](docs/WORK_STATUS.md) for exact
+capabilities and remaining integration work. Install development checks with
+`pip install -r requirements-dev.txt`; test-only dependencies are excluded from the
+production container.

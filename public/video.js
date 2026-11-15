@@ -9,7 +9,7 @@ function headers(){return {'x-zemavoice-key':el('key').value};}
 function message(text){el('status').textContent=text;}
 function busy(value){el('render').disabled=value||!ready;el('check').disabled=value;el('key').disabled=value;el('resume').disabled=value||!ready;el('forget').disabled=value;}
 async function errorText(response){try{const data=await response.json();return typeof data.detail==='string'?data.detail:'Request failed.';}catch{return 'Request failed (HTTP '+response.status+').';}}
-async function showResult(response){if(!response.ok)throw Error(await errorText(response));if(!response.headers.get('content-type')?.startsWith('video/mp4'))throw Error('The server did not return an MP4.');const blob=await response.blob();if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);el('result').src=resultUrl;el('result').hidden=false;el('download').href=resultUrl;el('download').hidden=false;message('Video ready. Play it below and check lip timing, pauses, and the ending.');}
+async function showResult(response){if(!response.ok)throw Error(await errorText(response));if(!response.headers.get('content-type')?.startsWith('video/mp4'))throw Error('The server did not return an MP4.');const blob=await response.blob();if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);el('result').src=resultUrl;el('result').hidden=false;el('download').href=resultUrl;el('download').hidden=false;message('Video ready. Play it below and check lip timing, pauses, and the ending.');if(window.parent!==window)window.parent.postMessage({type:'zemavoice-result',kind:'video',url:resultUrl,name:'zemavoice-lipsync.mp4'},location.origin);}
 async function monitor(id){
     monitoring=true;el('stop').hidden=false;el('progress').hidden=false;
     try{
@@ -53,3 +53,5 @@ window.addEventListener('beforeunload',()=>{if(resultUrl)URL.revokeObjectURL(res
 
 el('forget').hidden=!savedJob();
 el('forget').onclick=()=>{if(window.confirm('Forget this job reference? This does not cancel the GPU job. You may lose access to its result.')){clearJob();el('resume').hidden=true;message('Saved job reference removed from this tab.');}};
+
+window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='zemavoice-connection')return;el('key').value=String(event.data.key||'');ready=false;el('render').disabled=true;el('resume').disabled=true;});

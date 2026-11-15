@@ -23,7 +23,6 @@ class LatentSyncBackend:
         self.pipeline = None
         self.load_seconds = 0
         self.load_count = 0
-        self.detectors = {}
 
     def infer(self, video, audio, output, temp, steps):
         repo = Path(os.environ['LATENTSYNC_REPO']).resolve()
@@ -57,19 +56,7 @@ class LatentSyncBackend:
                 self.load_count += 1
             self.set_seed(1247)
             cfg = self.config
-            # Reuse detector weights, but create a fresh ImageProcessor/restorer on
-            # every call so temporal smoothing history never crosses videos.
-            from latentsync.utils import image_processor
-            detector_factory = image_processor.FaceDetector
-            def cached_detector(device="cuda"):
-                if device not in self.detectors:
-                    self.detectors[device] = detector_factory(device=device)
-                return self.detectors[device]
-            image_processor.FaceDetector = cached_detector
-            try:
-                self.pipeline(video_path=str(video), audio_path=str(audio), video_out_path=str(output),
-                    num_frames=cfg.data.num_frames, num_inference_steps=steps, guidance_scale=1.5,
-                    weight_dtype=self.dtype, width=cfg.data.resolution, height=cfg.data.resolution,
-                    mask_image_path=cfg.data.mask_image_path, temp_dir=str(temp))
-            finally:
-                image_processor.FaceDetector = detector_factory
+            self.pipeline(video_path=str(video), audio_path=str(audio), video_out_path=str(output),
+                num_frames=cfg.data.num_frames, num_inference_steps=steps, guidance_scale=1.5,
+                weight_dtype=self.dtype, width=cfg.data.resolution, height=cfg.data.resolution,
+                mask_image_path=cfg.data.mask_image_path, temp_dir=str(temp))

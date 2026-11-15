@@ -116,11 +116,11 @@ def command_renderer(folder):
 
 def warm_renderer():
     from gpu.latentsync_backend import LatentSyncBackend
-    from gpu.render_latentsync import render
+    from gpu.render_long import render_long
     backend = LatentSyncBackend()
     def run(folder):
         profile = json.loads((folder/'options.json').read_text())['profile']
-        render(folder/'video.mp4', folder/'audio', folder/'result.mp4', profile, infer=backend.infer)
+        render_long(folder/'video.mp4', folder/'audio', folder/'result.mp4', profile, infer=backend.infer)
     return run
 
 def create_app(root=None, renderer=command_renderer, start_worker=True):
