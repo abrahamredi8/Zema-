@@ -36,3 +36,13 @@ def test_embedded_tools_allow_only_same_origin_frames():
         response=client.get(path)
         assert response.headers['x-frame-options']=='SAMEORIGIN'
         assert "frame-ancestors 'self'" in response.headers['content-security-policy']
+
+
+def test_design_preview_is_not_a_login_or_production_route(monkeypatch):
+    client=TestClient(app)
+    response=client.get('/preview')
+    assert response.status_code==200
+    assert '/preview.js' in response.text
+    assert 'src="/firebase-auth.js"' not in response.text
+    monkeypatch.setattr('app.PROD', True)
+    assert client.get('/preview').status_code==404

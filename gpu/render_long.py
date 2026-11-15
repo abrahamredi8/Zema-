@@ -3,7 +3,7 @@ import json
 import math
 from pathlib import Path
 import time
-from gpu.render_latentsync import render, probe, run, PROFILES
+from gpu.render_latentsync import render, probe, run, PROFILES, normalize_video
 
 
 def render_long(video, audio, output, profile='quality', infer=None, chunk_seconds=5):
@@ -21,7 +21,7 @@ def render_long(video, audio, output, profile='quality', infer=None, chunk_secon
     started = time.perf_counter()
     root = output.parent/'windows';root.mkdir(parents=True, exist_ok=True)
     source = root/'source25.mp4'
-    run(['ffmpeg','-y','-v','error','-i',video,'-an','-vf',"scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25",'-c:v','libx264','-crf','15',source])
+    normalize_video(video, source, streams[0])
     frames = int(probe(source)['streams'][0]['nb_frames'])
     speech_frames = min(frames, math.ceil(audio_seconds*25))
     core_frames = round(chunk_seconds*25)

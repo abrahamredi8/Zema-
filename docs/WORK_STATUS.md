@@ -43,3 +43,7 @@ restrictions keep this evaluation out of a paid service.
 The GPU worker needs an operator-provided GPU environment, private persistent disk
 and HTTPS. Colab is a test runtime, not reliable always-on hosting. No paid hosting
 or public endpoint was provisioned. No credentials belong in repository content.
+
+A browser-local audio-volume tool is also implemented: preview and PCM WAV export,
+peak-limited gain, no speed/pitch change, no uploads, and no claim of denoising.
+The signed-in workspace still requires real browser testing before release.

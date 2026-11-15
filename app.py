@@ -8,7 +8,7 @@ from typing import Literal
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Depends, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field
 from auth import router as auth_router
@@ -127,10 +127,20 @@ def video_studio():
 def video_script():
     return FileResponse(PUBLIC_DIR / 'video.js', media_type='application/javascript')
 
+@app.get('/preview')
+def development_preview():
+    if PROD:
+        raise HTTPException(404, 'Not found')
+    html = (PUBLIC_DIR / 'index.html').read_text().replace(
+        '<script type="module" src="/firebase-auth.js"></script>',
+        '<script src="/preview.js" defer></script>')
+    return HTMLResponse(html)
+
 # Explicit asset list prevents exposing source, credentials or arbitrary paths.
 @app.get('/{asset}')
 def workspace_asset(asset: str):
-    types = {'workspace.css':'text/css', 'workspace.js':'application/javascript',
+    types = {'preview.js':'application/javascript', 'workspace.css':'text/css', 'workspace.js':'application/javascript',
+             'audio-processing.js':'application/javascript', 'audio-tools.js':'application/javascript',
              'home.js':'application/javascript', 'voice-profiles.js':'application/javascript'}
     if asset not in types:
         raise HTTPException(404, 'Not found')
