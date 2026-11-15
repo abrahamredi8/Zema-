@@ -52,7 +52,7 @@ async def security_headers(request: Request, call_next):
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         response.headers['Content-Security-Policy'] = response.headers['Content-Security-Policy'].replace("frame-ancestors 'none'", "frame-ancestors 'self'")
     if not PROD and os.getenv('APP_PREVIEW_COLAB') == '1' and request.url.path in ('/preview', '/video', '/studio'):
-        response.headers.pop('X-Frame-Options', None)
+        del response.headers['X-Frame-Options']
         policy = response.headers['Content-Security-Policy']
         response.headers['Content-Security-Policy'] = policy[:policy.index('frame-ancestors')] + "frame-ancestors 'self' https://colab.research.google.com https://*.googleusercontent.com"
     if PROD:

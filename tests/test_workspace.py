@@ -47,3 +47,16 @@ def test_design_preview_is_not_a_login_or_production_route(monkeypatch):
     monkeypatch.setattr('app.PROD', True)
     assert client.get('/preview').status_code==404
     assert client.get('/preview.js').status_code==404
+
+
+def test_colab_preview_policy_never_applies_in_production(monkeypatch):
+    client=TestClient(app)
+    monkeypatch.setenv('APP_PREVIEW_COLAB','1')
+    preview=client.get('/preview')
+    assert preview.status_code==200
+    assert 'x-frame-options' not in preview.headers
+    assert 'https://colab.research.google.com' in preview.headers['content-security-policy']
+    monkeypatch.setattr('app.PROD',True)
+    assert client.get('/preview').status_code==404
+    assert client.get('/video').headers['x-frame-options']=='SAMEORIGIN'
+    assert 'https://colab.research.google.com' not in client.get('/video').headers['content-security-policy']
