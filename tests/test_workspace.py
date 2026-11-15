@@ -46,3 +46,4 @@ def test_design_preview_is_not_a_login_or_production_route(monkeypatch):
     assert 'src="/firebase-auth.js"' not in response.text
     monkeypatch.setattr('app.PROD', True)
     assert client.get('/preview').status_code==404
+    assert client.get('/preview.js').status_code==404

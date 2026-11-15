@@ -51,6 +51,10 @@ async def security_headers(request: Request, call_next):
     if request.url.path in ('/video', '/studio'):
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         response.headers['Content-Security-Policy'] = response.headers['Content-Security-Policy'].replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+    if not PROD and os.getenv('APP_PREVIEW_COLAB') == '1' and request.url.path in ('/preview', '/video', '/studio'):
+        response.headers.pop('X-Frame-Options', None)
+        policy = response.headers['Content-Security-Policy']
+        response.headers['Content-Security-Policy'] = policy[:policy.index('frame-ancestors')] + "frame-ancestors 'self' https://colab.research.google.com https://*.googleusercontent.com"
     if PROD:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
@@ -142,6 +146,6 @@ def workspace_asset(asset: str):
     types = {'preview.js':'application/javascript', 'workspace.css':'text/css', 'workspace.js':'application/javascript',
              'audio-processing.js':'application/javascript', 'audio-tools.js':'application/javascript',
              'home.js':'application/javascript', 'voice-profiles.js':'application/javascript'}
-    if asset not in types:
+    if asset not in types or (PROD and asset == 'preview.js'):
         raise HTTPException(404, 'Not found')
     return FileResponse(PUBLIC_DIR / asset, media_type=types[asset])
