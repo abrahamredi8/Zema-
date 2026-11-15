@@ -1,6 +1,7 @@
 """Private beta gateway; keeps existing sync and async routes compatible."""
 import os
 import re
+from threading import BoundedSemaphore
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -10,6 +11,17 @@ from pydantic import BaseModel, Field, ValidationError
 
 MAX_BYTES = 40 * 1024 * 1024
 RESULT_LIMIT = 100 * 1024 * 1024
+
+# Bound peak buffering on the small web host; polling remains available.
+MEDIA_SLOT = BoundedSemaphore(1)
+
+async def media_slot():
+    if not MEDIA_SLOT.acquire(blocking=False):
+        raise HTTPException(429, 'A media transfer is already active; try again shortly')
+    try:
+        yield
+    finally:
+        MEDIA_SLOT.release()
 
 class JobState(BaseModel):
     job_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,80}$')
@@ -77,7 +89,7 @@ def build_router(authorize):
                 'mode': 'private-evaluation', 'max_upload_bytes': MAX_BYTES,
                 'note': 'Configuration does not confirm GPU availability or commercial licensing.'}
 
-    @router.post('/render')
+    @router.post('/render', dependencies=[Depends(media_slot)])
     async def render(request: Request):
         endpoint, headers = settings('LIPSYNC_ENGINE_URL')
         return await proxy('POST', endpoint, headers, await upload(request, headers), result=True, timeout=300)
@@ -92,7 +104,7 @@ def build_jobs_router(authorize):
             raise HTTPException(400, 'Invalid job identifier')
         return endpoint + '/' + job_id + ('/result' if result else ''), headers
 
-    @router.post('', status_code=202)
+    @router.post('', status_code=202, dependencies=[Depends(media_slot)])
     async def submit(request: Request, profile: Literal['fast', 'quality'] = 'quality'):
         endpoint, headers = settings('LIPSYNC_JOBS_URL')
         return await proxy('POST', endpoint + '?profile=' + profile, headers, await upload(request, headers))
@@ -102,7 +114,7 @@ def build_jobs_router(authorize):
         endpoint, headers = job_endpoint(job_id)
         return await proxy('GET', endpoint, headers, expected_id=job_id)
 
-    @router.get('/{job_id}/result')
+    @router.get('/{job_id}/result', dependencies=[Depends(media_slot)])
     async def result(job_id: str):
         endpoint, headers = job_endpoint(job_id, result=True)
         return await proxy('GET', endpoint, headers, result=True)

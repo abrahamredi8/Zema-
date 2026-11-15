@@ -17,7 +17,7 @@ def benchmark(video, audio, output):
         folder.mkdir(parents=True, exist_ok=True)
         loads_before = backend.load_count
         metrics = render(video, audio, folder/'result.mp4', profile, infer=backend.infer)
-        metrics.update(run=name, model_loaded_this_run=backend.load_count>loads_before,
+        metrics.update(run=name, model_loaded_this_run=backend.load_count>loads_before, detector_instances=len(backend.detectors),
                        model_load_seconds=round(backend.load_seconds,3) if backend.load_count>loads_before else 0)
         results.append(metrics)
         (output/'benchmark.json').write_text(json.dumps({'runs':results, 'visual_review_required':True},indent=2))

@@ -89,3 +89,18 @@ def test_profile_validation_and_queue_backpressure(monkeypatch):
     assert client.post('/v1/lipsync/jobs?profile=fast',headers=HEADERS,files=files).status_code==429
     assert seen==['fast']
     assert client.post('/v1/lipsync/jobs?profile=unknown',headers=HEADERS,files=files).status_code==422
+
+def test_transfer_backpressure_keeps_status_available(monkeypatch):
+    from lipsync_api import MEDIA_SLOT
+    monkeypatch.setenv('ZEMAVOICE_API_KEY','test-private-key')
+    assert MEDIA_SLOT.acquire(blocking=False)
+    try:
+        assert client.post('/v1/lipsync/jobs',headers=HEADERS).status_code==429
+        assert client.get('/v1/lipsync/status',headers=HEADERS).status_code==200
+    finally:
+        MEDIA_SLOT.release()
+    # An error in the route must also release admission for the next request.
+    monkeypatch.delenv('LIPSYNC_JOBS_URL',raising=False)
+    assert client.post('/v1/lipsync/jobs',headers=HEADERS).status_code==503
+    assert MEDIA_SLOT.acquire(blocking=False)
+    MEDIA_SLOT.release()

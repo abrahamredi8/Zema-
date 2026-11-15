@@ -45,6 +45,7 @@ def render(video, audio, output, profile="quality", infer=None):
     audible = np.flatnonzero(np.abs(pcm.astype(np.int32))>80)
     last = (audible[-1]+1)/16000 if len(audible) else 0
     count = math.ceil(aduration*25)
+    prepared = time.perf_counter()
     if last:
         run(['ffmpeg','-y','-v','error','-i',source,'-frames:v',count,'-an','-c:v','libx264','-crf','15',speech])
         if infer is not None:
@@ -54,11 +55,12 @@ def render(video, audio, output, profile="quality", infer=None):
             adapter=repo/'scripts/inference_zemavoice.py'
             adapter.write_text((repo/'scripts/inference.py').read_text().replace('torch.cuda.get_device_capability()[0] > 7','torch.cuda.get_device_capability()[0] >= 7'))
             run([python,'-u','-m','scripts.inference_zemavoice','--unet_config_path','configs/unet/stage2.yaml','--inference_ckpt_path','checkpoints/latentsync_unet.pt','--inference_steps',str(steps),'--guidance_scale','1.5','--video_path',speech,'--audio_path',wav,'--video_out_path',raw,'--temp_dir',work/'temp','--seed','1247'],cwd=repo)
+    inferred = time.perf_counter()
     original=cv2.VideoCapture(str(source))
     generated=cv2.VideoCapture(str(raw)) if last else None
     n=int(original.get(cv2.CAP_PROP_FRAME_COUNT));width=int(original.get(3));height=int(original.get(4))
     if generated and int(generated.get(cv2.CAP_PROP_FRAME_COUNT)) < count: raise ValueError('Incomplete AI output')
-    command=['ffmpeg','-y','-v','error','-f','rawvideo','-pix_fmt','bgr24','-s',f'{width}x{height}','-r','25','-i','pipe:0','-i',wav,'-map','0:v:0','-map','1:a:0','-af','apad','-t',str(n/25),'-c:v','libx264','-crf','15','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart',output]
+    command=['ffmpeg','-y','-v','error','-f','rawvideo','-pix_fmt','bgr24','-s',f'{width}x{height}','-r','25','-i','pipe:0','-i',audio,'-map','0:v:0','-map','1:a:0','-af','apad','-t',str(n/25),'-c:v','libx264','-crf','15','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart',output]
     encoder=subprocess.Popen(list(map(str,command)),stdin=subprocess.PIPE)
     try:
         for i in range(n):
@@ -81,7 +83,10 @@ def render(video, audio, output, profile="quality", infer=None):
         if encoder.poll() is None:
             encoder.kill();encoder.wait()
     metrics = {'profile': profile, 'inference_steps': steps, 'audio_seconds': aduration,
-               'total_seconds': round(time.perf_counter()-started, 3)}
+               'total_seconds': round(time.perf_counter()-started, 3),
+               'preprocess_seconds': round(prepared-started, 3),
+               'ai_seconds': round(inferred-prepared, 3),
+               'assembly_seconds': round(time.perf_counter()-inferred, 3)}
     (work/'metrics.json').write_text(json.dumps(metrics, indent=2))
     return metrics
 

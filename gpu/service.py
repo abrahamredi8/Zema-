@@ -26,6 +26,7 @@ class Jobs:
         self.root.mkdir(parents=True, exist_ok=True)
         with self.db() as db:
             db.execute('CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, status TEXT, progress INTEGER, created REAL)')
+            db.execute('CREATE INDEX IF NOT EXISTS jobs_status_created ON jobs(status, created)')
 
     @contextmanager
     def db(self):
@@ -129,8 +130,11 @@ def create_app(root=None, renderer=command_renderer, start_worker=True):
     stop = threading.Event()
 
     def loop():
+        next_prune = 0.0
         while not stop.is_set():
-            jobs.prune()
+            if time.monotonic() >= next_prune:
+                jobs.prune()
+                next_prune = time.monotonic() + 60
             if not jobs.run_next(renderer): stop.wait(1)
 
     @asynccontextmanager
