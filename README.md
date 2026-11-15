@@ -64,3 +64,30 @@ Muse supports a verified API integration. Existing LatentSync/InsightFace model 
 have not been cleared for commercial use; keep this evaluation private.
 
 Validation: `python -m pytest -q`; `node --check public/video.js`.
+
+### Asynchronous job integration
+
+For longer scenes set `LIPSYNC_JOBS_URL` to a compatible GPU service's HTTPS job
+collection endpoint, such as `https://your-gpu-host/jobs`. The browser prefers this
+mode when configured. It uploads once, polls every four seconds, and downloads the
+MP4 after completion. It saves only the job ID in this tab's session storage, never
+the beta key. A reload requires re-entering the key and checking the connection.
+
+Engine contract:
+
+- POST collection: multipart video/audio; return 200 or 202 with job state.
+- GET collection/{id}: return job state.
+- GET collection/{id}/result: return MP4, 409 while not ready, or 404 if expired.
+- Every request receives the server-only Bearer credential.
+- State: `{"job_id":"job_123","status":"queued","progress":0}`. Status must be
+  queued, running, succeeded, failed, or cancelled; progress is an integer 0–100.
+- The GPU service owns durable job state, retention, resource limits, and access
+  isolation. The gateway does not create that queue or provide GPU computation.
+
+Stopping progress checks does not cancel the GPU job. A separate button can forget
+a saved reference after confirmation, without deleting upstream data. Submissions
+are never automatically retried after an ambiguous upload failure.
+
+Six automated checks cover both gateway modes, including async lifecycle, expired
+results, mismatched IDs, and filtering additional upstream fields. End-to-end GPU
+rendering and mobile browser interaction still require validation before release.

@@ -104,8 +104,9 @@ async def tts(req: SpeechRequest):
     return await addis_request('POST', '/api/v1/voice/generations', json=payload)
 
 
-from lipsync_api import build_router
+from lipsync_api import build_router, build_jobs_router
 app.include_router(build_router(authorize))
+app.include_router(build_jobs_router(authorize))
 
 @app.get('/manifest.webmanifest')
 def manifest():
