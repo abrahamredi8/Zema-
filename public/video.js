@@ -43,7 +43,7 @@ el('renderForm').onsubmit=async event=>{
     message('Uploading… Keep this page open.');
     try{
         const form=new FormData();form.append('video',video);form.append('audio',audio);
-        const response=await fetch(useJobs?'/v1/lipsync/jobs':'/v1/lipsync/render',{method:'POST',headers:headers(),body:form});
+        const response=await fetch(useJobs?'/v1/lipsync/jobs?profile='+encodeURIComponent(el('profile').value):'/v1/lipsync/render',{method:'POST',headers:headers(),body:form});
         if(!response.ok)throw Error(await errorText(response));
         if(useJobs){const job=await response.json();saveJob(job.job_id);el('resume').hidden=false;await monitor(job.job_id);}else await showResult(response);
     }catch(error){message(error.message+' No finished video was received. If the upload was interrupted, the engine may have accepted it; check before submitting again.');}

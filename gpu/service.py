@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager, contextmanager
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -21,7 +22,7 @@ LIMIT = 40 * 1024 * 1024
 
 class Jobs:
     def __init__(self, root):
-        self.root = Path(root)
+        self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         with self.db() as db:
             db.execute('CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, status TEXT, progress INTEGER, created REAL)')
@@ -36,7 +37,7 @@ class Jobs:
         finally:
             db.close()
 
-    def add(self, video, audio):
+    def add(self, video, audio, profile="quality"):
         job_id = uuid.uuid4().hex
         folder = self.root / job_id
         with self.db() as db:
@@ -47,6 +48,7 @@ class Jobs:
             try:
                 (folder / 'video.mp4').write_bytes(video)
                 (folder / 'audio').write_bytes(audio)
+                (folder / 'options.json').write_text(json.dumps({'profile': profile}))
                 db.execute('INSERT INTO jobs VALUES (?, ?, ?, ?)', (job_id, 'queued', 0, time.time()))
             except Exception:
                 shutil.rmtree(folder, ignore_errors=True)
@@ -98,7 +100,7 @@ class Jobs:
             # Only final output and state survive; intermediate files can be large.
             folder = self.root / job_id
             for path in folder.iterdir():
-                if path.name != 'result.mp4':
+                if path.name not in ('result.mp4', 'metrics.json'):
                     if path.is_dir(): shutil.rmtree(path, ignore_errors=True)
                     else: path.unlink(missing_ok=True)
         return True
@@ -107,11 +109,22 @@ def command_renderer(folder):
     command = json.loads(os.environ['LIPSYNC_RENDER_COMMAND'])
     if not isinstance(command, list) or not command or not all(isinstance(x, str) for x in command):
         raise ValueError('Render command must be a JSON string array')
-    values = {'video': str(folder / 'video.mp4'), 'audio': str(folder / 'audio'), 'output': str(folder / 'result.mp4')}
+    values = {'video': str(folder / 'video.mp4'), 'audio': str(folder / 'audio'), 'output': str(folder / 'result.mp4'), 'profile': json.loads((folder/'options.json').read_text()).get('profile','quality')}
     subprocess.run([part.format(**values) for part in command], check=True, timeout=1800,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+def warm_renderer():
+    from gpu.latentsync_backend import LatentSyncBackend
+    from gpu.render_latentsync import render
+    backend = LatentSyncBackend()
+    def run(folder):
+        profile = json.loads((folder/'options.json').read_text())['profile']
+        render(folder/'video.mp4', folder/'audio', folder/'result.mp4', profile, infer=backend.infer)
+    return run
+
 def create_app(root=None, renderer=command_renderer, start_worker=True):
+    if renderer is command_renderer and os.getenv('LIPSYNC_WARM_MODEL') == '1':
+        renderer = warm_renderer()
     jobs = Jobs(root or os.getenv('LIPSYNC_JOB_DIR', '/data/zemavoice-jobs'))
     stop = threading.Event()
 
@@ -140,7 +153,7 @@ def create_app(root=None, renderer=command_renderer, start_worker=True):
         if not hmac.compare_digest(authorization, 'Bearer ' + expected): raise HTTPException(401, 'Unauthorized')
 
     @app.post('/jobs', dependencies=[Depends(auth)], status_code=202)
-    async def submit(request: Request):
+    async def submit(request: Request, profile: Literal["fast", "quality"] = "quality"):
         kind = request.headers.get('content-type', '')
         if not kind.lower().startswith('multipart/form-data;'): raise HTTPException(415, 'Multipart upload required')
         data = bytearray()
@@ -160,7 +173,7 @@ def create_app(root=None, renderer=command_renderer, start_worker=True):
             if set(files) != {'video', 'audio'}: raise ValueError('Missing media')
         except (ValueError, TypeError):
             raise HTTPException(422, 'Provide exactly one video and one audio file')
-        return jobs.add(files['video'], files['audio'])
+        return jobs.add(files['video'], files['audio'], profile)
 
     @app.get('/jobs/{job_id}', dependencies=[Depends(auth)])
     def state(job_id: str): return jobs.get(job_id)

@@ -74,3 +74,18 @@ def test_malformed_jobs_and_expired_results(monkeypatch):
     monkeypatch.setattr('lipsync_api.httpx.AsyncClient',lambda **kw: original(transport=httpx.MockTransport(upstream),**kw))
     assert client.get('/v1/lipsync/jobs/job_123',headers=HEADERS).status_code==502
     assert client.get('/v1/lipsync/jobs/job_123/result',headers=HEADERS).status_code==404
+
+def test_profile_validation_and_queue_backpressure(monkeypatch):
+    monkeypatch.setenv('ZEMAVOICE_API_KEY','test-private-key')
+    monkeypatch.setenv('LIPSYNC_JOBS_URL','https://gpu.example/jobs')
+    monkeypatch.setenv('LIPSYNC_ENGINE_KEY','worker-secret')
+    original=httpx.AsyncClient
+    seen=[]
+    def upstream(request):
+        seen.append(request.url.params['profile'])
+        return httpx.Response(429)
+    monkeypatch.setattr('lipsync_api.httpx.AsyncClient',lambda **kw:original(transport=httpx.MockTransport(upstream),**kw))
+    files={'video':('v.mp4',b'v'),'audio':('a.wav',b'a')}
+    assert client.post('/v1/lipsync/jobs?profile=fast',headers=HEADERS,files=files).status_code==429
+    assert seen==['fast']
+    assert client.post('/v1/lipsync/jobs?profile=unknown',headers=HEADERS,files=files).status_code==422

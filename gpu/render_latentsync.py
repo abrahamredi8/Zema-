@@ -8,6 +8,7 @@ import math
 import os
 from pathlib import Path
 import subprocess
+import time
 
 
 def run(command, **kwargs):
@@ -18,7 +19,11 @@ def probe(path):
     return json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)], timeout=30))
 
 
-def render(video, audio, output):
+PROFILES = {"fast": 20, "quality": 30}
+
+def render(video, audio, output, profile="quality", infer=None):
+    started = time.perf_counter()
+    steps = PROFILES[profile]
     import cv2
     import numpy as np
     repo = Path(os.environ['LATENTSYNC_REPO']).resolve()
@@ -42,10 +47,13 @@ def render(video, audio, output):
     count = math.ceil(aduration*25)
     if last:
         run(['ffmpeg','-y','-v','error','-i',source,'-frames:v',count,'-an','-c:v','libx264','-crf','15',speech])
-        # Separate adapter preserves the original official inference script.
-        adapter=repo/'scripts/inference_zemavoice.py'
-        adapter.write_text((repo/'scripts/inference.py').read_text().replace('torch.cuda.get_device_capability()[0] > 7','torch.cuda.get_device_capability()[0] >= 7'))
-        run([python,'-u','-m','scripts.inference_zemavoice','--unet_config_path','configs/unet/stage2.yaml','--inference_ckpt_path','checkpoints/latentsync_unet.pt','--inference_steps','30','--guidance_scale','1.5','--video_path',speech,'--audio_path',wav,'--video_out_path',raw,'--temp_dir',work/'temp','--seed','1247'],cwd=repo)
+        if infer is not None:
+            infer(speech, wav, raw, work/'temp', steps)
+        else:
+            # Separate adapter preserves the original official inference script.
+            adapter=repo/'scripts/inference_zemavoice.py'
+            adapter.write_text((repo/'scripts/inference.py').read_text().replace('torch.cuda.get_device_capability()[0] > 7','torch.cuda.get_device_capability()[0] >= 7'))
+            run([python,'-u','-m','scripts.inference_zemavoice','--unet_config_path','configs/unet/stage2.yaml','--inference_ckpt_path','checkpoints/latentsync_unet.pt','--inference_steps',str(steps),'--guidance_scale','1.5','--video_path',speech,'--audio_path',wav,'--video_out_path',raw,'--temp_dir',work/'temp','--seed','1247'],cwd=repo)
     original=cv2.VideoCapture(str(source))
     generated=cv2.VideoCapture(str(raw)) if last else None
     n=int(original.get(cv2.CAP_PROP_FRAME_COUNT));width=int(original.get(3));height=int(original.get(4))
@@ -72,9 +80,14 @@ def render(video, audio, output):
         if generated: generated.release()
         if encoder.poll() is None:
             encoder.kill();encoder.wait()
+    metrics = {'profile': profile, 'inference_steps': steps, 'audio_seconds': aduration,
+               'total_seconds': round(time.perf_counter()-started, 3)}
+    (work/'metrics.json').write_text(json.dumps(metrics, indent=2))
+    return metrics
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     for name in ('video','audio','output'):parser.add_argument('--'+name,type=Path,required=True)
+    parser.add_argument('--profile', choices=PROFILES, default='quality')
     args=parser.parse_args()
-    render(args.video.resolve(),args.audio.resolve(),args.output.resolve())
+    render(args.video.resolve(),args.audio.resolve(),args.output.resolve(),args.profile)

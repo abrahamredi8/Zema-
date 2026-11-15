@@ -57,3 +57,28 @@ The tests cover persistence, queue capacity, failure recovery, expiry, auth, and
 real-media gateway→worker→download round trip using FFmpeg in place of AI. They do
 not run or claim GPU inference. Before deployment, render the original human sample,
 review lip timing and ending, then test a 30-second dialogue with pauses.
+
+## Speed profiles and resident model
+
+The default quality profile retains 30 inference steps. The experimental fast profile
+uses 20; compare mouth detail and timing before selecting it for final output.
+Submissions carry `?profile=fast` or `?profile=quality`. A custom command must include
+`--profile {profile}` to honor the selected mode.
+
+For repeated jobs, run this service in the actual LatentSync Python environment and
+set `LIPSYNC_WARM_MODEL=1`. The serial worker then calls the renderer in-process and
+loads the model lazily once, keeping it on the GPU between jobs. This mode must not
+run in a shared multi-thread inference environment: the underlying repository uses
+relative resource paths. The original subprocess renderer remains the default for
+compatibility and process isolation. A process restart reloads the model.
+
+Benchmark with the same uploaded files, without changing the original notebook:
+
+```sh
+python -m gpu.benchmark --video /absolute/source.mp4 --audio /absolute/narration.wav --output /absolute/benchmark
+```
+
+It runs quality-cold, fast-warm, then quality-warm and saves three MP4s plus JSON
+measurements. Compare the two warm runs for profile speed, rather than confusing
+model loading time with inference speed. All outputs still require visual review.
+No speedup is asserted until this benchmark is measured on the target GPU.
