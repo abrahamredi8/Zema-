@@ -57,3 +57,26 @@ def test_colab_bundle_has_no_live_signin_or_external_script_assets():
     assert '<script src=' not in source
     assert 'Video engine connection' in source
     assert 'srcdoc=' in source
+
+
+def test_design_preview_disables_engine_credentials_and_requests():
+    import subprocess
+    import shutil
+    import pytest
+    if not shutil.which('node'):
+        pytest.skip('Node is required')
+    script = r"""
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const nodes={};
+const document={readyState:'complete',
+ getElementById(id){return nodes[id]||(nodes[id]={value:'synthetic-saved-key',disabled:false,style:{}});},
+ createElement(){return {style:{}};},
+ querySelector(){return {after(){}};}
+};
+const window={dispatchEvent(){}};
+class CustomEvent {constructor(type,options){this.type=type;this.detail=options.detail;}}
+vm.runInNewContext(fs.readFileSync('public/preview.js','utf8'),{document,window,CustomEvent});
+assert.equal(nodes.key.value,'');
+for(const id of ['key','remember','forget','load','generate'])assert.equal(nodes[id].disabled,true);
+"""
+    subprocess.run(['node','-e',script],cwd=Path(__file__).resolve().parents[1],check=True)
