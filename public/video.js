@@ -1,7 +1,7 @@
 'use strict';
 if(new URLSearchParams(location.search).get('embedded')==='1')document.body.classList.add('embedded');
 const el=id=>document.getElementById(id);
-let ready=false, useJobs=false, resultUrl, monitoring=false, monitorController;
+let ready=false, useJobs=false, resultUrl, monitoring=false, monitorController, submitting=false; 
 const storageKey='zemavoice-last-job';
 function savedJob(){try{return sessionStorage.getItem(storageKey);}catch{return null;}}
 function saveJob(id){el('forget').hidden=false;try{sessionStorage.setItem(storageKey,id);}catch{}}
@@ -61,19 +61,21 @@ el('check').onclick=async()=>{busy(true);ready=false;try{const response=await fe
 el('stop').onclick=()=>{stopMonitoring();el('stop').disabled=true;};
 el('resume').onclick=async()=>{const id=savedJob();if(!id||!ready||!useJobs)return;busy(true);el('stop').disabled=false;try{await monitor(id);}catch(error){message(error.message+(savedJob()?' Use Resume to retry checking; this does not submit another render.':''));}finally{busy(false);}};
 el('renderForm').onsubmit=async event=>{
-    event.preventDefault();if(!ready)return;
+    event.preventDefault();if(!ready||submitting)return;
     if(useJobs&&savedJob()){message('A previous render is saved in this tab. Resume it before submitting another job.');el('resume').hidden=false;return;}
     const video=el('video').files[0],audio=el('audio').files[0];if(!video||!audio)return;
     if(video.size+audio.size+65536>40*1024*1024){message('Combined upload is too large. Choose smaller files.');return;}
-    busy(true);el('stop').disabled=false;el('result').hidden=true;el('download').hidden=true;
+    submitting=true;busy(true);el('stop').disabled=false;el('result').hidden=true;el('download').hidden=true;
     message('Uploading… Keep this page open.');
+    const uploadController=new AbortController();
+    const uploadTimer=setTimeout(()=>uploadController.abort(),useJobs?180000:600000);
     try{
         const form=new FormData();form.append('video',video);form.append('audio',audio);
-        const response=await fetch(useJobs?'/v1/lipsync/jobs?profile='+encodeURIComponent(el('profile').value):'/v1/lipsync/render',{method:'POST',headers:headers(),body:form});
+        const response=await fetch(useJobs?'/v1/lipsync/jobs?profile='+encodeURIComponent(el('profile').value):'/v1/lipsync/render',{method:'POST',headers:headers(),body:form,signal:uploadController.signal});
         if(!response.ok)throw Error(await errorText(response));
-        if(useJobs){const job=await response.json();saveJob(job.job_id);el('resume').hidden=false;await monitor(job.job_id);}else await showResult(response);
-    }catch(error){message(error.message+' No finished video was received. If the upload was interrupted, the engine may have accepted it; check before submitting again.');}
-    finally{busy(false);}
+        if(useJobs){const job=await response.json();clearTimeout(uploadTimer);saveJob(job.job_id);el('resume').hidden=false;await monitor(job.job_id);}else await showResult(response);
+    }catch(error){message((uploadController.signal.aborted?'The upload or render response timed out.':error.message)+' No finished video was received. If the upload was interrupted, the engine may have accepted it; check before submitting again.');}
+    finally{clearTimeout(uploadTimer);submitting=false;busy(false);}
 };
 window.addEventListener('beforeunload',()=>{stopMonitoring();if(resultUrl)URL.revokeObjectURL(resultUrl);});
 
