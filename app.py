@@ -8,7 +8,7 @@ from typing import Literal
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Depends, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field
 from auth import router as auth_router
@@ -47,7 +47,10 @@ async def security_headers(request: Request, call_next):
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Cache-Control'] = 'no-store'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseapp.com https://*.firebaseapp.com; frame-src https://accounts.google.com https://zemavoice-ai.firebaseapp.com; media-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseapp.com https://*.firebaseapp.com; frame-src 'self' https://accounts.google.com https://zemavoice-ai.firebaseapp.com; media-src 'self' blob: https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    if request.url.path in ('/video', '/studio'):
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['Content-Security-Policy'] = response.headers['Content-Security-Policy'].replace("frame-ancestors 'none'", "frame-ancestors 'self'")
     if PROD:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
@@ -102,3 +105,43 @@ async def tts(req: SpeechRequest):
     payload = req.model_dump(exclude_none=True)
     payload['client_request_id'] = payload.get('client_request_id') or str(uuid.uuid4())
     return await addis_request('POST', '/api/v1/voice/generations', json=payload)
+
+
+from lipsync_api import build_router, build_jobs_router
+app.include_router(build_router(authorize))
+app.include_router(build_jobs_router(authorize))
+
+@app.get('/manifest.webmanifest')
+def manifest():
+    return FileResponse(PUBLIC_DIR / 'manifest.webmanifest', media_type='application/manifest+json')
+
+@app.get('/app-icon.svg')
+def app_icon():
+    return FileResponse(PUBLIC_DIR / 'app-icon.svg', media_type='image/svg+xml')
+
+@app.get('/video')
+def video_studio():
+    return FileResponse(PUBLIC_DIR / 'video.html')
+
+@app.get('/video.js')
+def video_script():
+    return FileResponse(PUBLIC_DIR / 'video.js', media_type='application/javascript')
+
+@app.get('/preview')
+def development_preview():
+    if PROD:
+        raise HTTPException(404, 'Not found')
+    html = (PUBLIC_DIR / 'index.html').read_text().replace(
+        '<script type="module" src="/firebase-auth.js"></script>',
+        '<script src="/preview.js" defer></script>')
+    return HTMLResponse(html)
+
+# Explicit asset list prevents exposing source, credentials or arbitrary paths.
+@app.get('/{asset}')
+def workspace_asset(asset: str):
+    types = {'preview.js':'application/javascript', 'workspace.css':'text/css', 'workspace.js':'application/javascript',
+             'audio-processing.js':'application/javascript', 'audio-tools.js':'application/javascript',
+             'home.js':'application/javascript', 'voice-profiles.js':'application/javascript'}
+    if asset not in types or (PROD and asset == 'preview.js'):
+        raise HTTPException(404, 'Not found')
+    return FileResponse(PUBLIC_DIR / asset, media_type=types[asset])

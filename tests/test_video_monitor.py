@@ -1,0 +1,139 @@
+"""Exercise the actual browser controller with stalled network requests."""
+from pathlib import Path
+import subprocess
+
+
+def test_stop_and_connection_change_abort_poll_without_resubmission():
+    root = Path(__file__).resolve().parents[1]
+    script = r"""
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+for(const reason of ['stop','connection','timeout']){
+ const elements=new Map(),listeners={},stored=new Map([['zemavoice-last-job','existing-job']]);
+ const element=id=>{if(!elements.has(id))elements.set(id,{value:id==='key'?'old-key':'',hidden:false,disabled:false});return elements.get(id);};
+ let calls=0,aborted=false;
+ const timers=new Map();let nextTimer=0;
+ const context={URL,URLSearchParams,AbortController,console,
+  location:{search:'',origin:'https://zema.example'},
+  document:{getElementById:element,body:{classList:{add(){}}}},
+  sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)},
+  setTimeout:(fn,ms)=>{const id=++nextTimer;timers.set(id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),
+  fetch:(url,options)=>{calls++;assert.equal(url,'/v1/lipsync/jobs/existing-job');assert.equal(options.headers['x-zemavoice-key'],'old-key');
+   return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{aborted=true;reject(Error('aborted'));},{once:true}));}
+ };
+ context.window={addEventListener:(name,fn)=>{listeners[name]=fn;}};
+ context.window.parent={};
+ vm.createContext(context);vm.runInContext(fs.readFileSync('public/video.js','utf8'),context);
+ vm.runInContext('ready=true;useJobs=true;',context);
+ const pending=element('resume').onclick();
+ assert.equal(calls,1);
+ if(reason==='stop')element('stop').onclick();
+ else if(reason==='connection')listeners.message({origin:context.location.origin,source:context.window.parent,data:{type:'zemavoice-connection',key:''}});
+ else [...timers.values()].find(t=>t.ms===30000).fn();
+ await pending;
+ assert.equal(aborted,true);assert.equal(calls,1,'Must never submit a second render');
+ assert.equal(stored.get('zemavoice-last-job'),'existing-job');
+ assert.equal(element('check').disabled,false);assert.equal(element('stop').hidden,true);
+ assert.match(element('status').textContent,/Resume/);
+ assert.equal(timers.size,0,'No leaked request timers');
+}
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    subprocess.run(['node', '-e', script], cwd=root, check=True)
+
+
+def test_missing_jobs_release_reference_but_temporary_errors_keep_it():
+    root = Path(__file__).resolve().parents[1]
+    script = r"""
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+for(const scenario of ['missing','expired','unauthorized','unavailable','failed','missing-result']){
+ const elements=new Map(),stored=new Map([['zemavoice-last-job','existing-job']]);
+ const element=id=>{if(!elements.has(id))elements.set(id,{value:'key',hidden:false,disabled:false});return elements.get(id);};
+ const codes={missing:404,expired:410,unauthorized:401,unavailable:503};let calls=0;
+ const context={URL,URLSearchParams,AbortController,setTimeout,clearTimeout,console,
+  location:{search:'',origin:'https://zema.example'},
+  document:{getElementById:element,body:{classList:{add(){}}}},
+  sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)},
+  fetch:async(url,options)=>{
+   assert.equal(options.method,undefined,'Monitoring must never resubmit a render');calls++;
+   const status=scenario==='missing-result'?(calls===1?200:404):(codes[scenario]||200);
+   return {status,ok:status===200,json:async()=>status===200?{status:scenario==='failed'?'failed':'succeeded',progress:100}:{detail:'Service error'}};
+  }
+ };
+ context.window={addEventListener(){},parent:{}};
+ vm.createContext(context);vm.runInContext(fs.readFileSync('public/video.js','utf8'),context);
+ vm.runInContext('ready=true;useJobs=true;',context);
+ await element('resume').onclick();
+ const keep=['unauthorized','unavailable'].includes(scenario);
+ assert.equal(stored.has('zemavoice-last-job'),keep,scenario);
+ assert.equal(element('resume').hidden,!keep,scenario);
+ assert.equal(element('render').disabled,false,scenario);
+ assert.equal(element('status').textContent.includes('Use Resume'),keep,scenario);
+ assert.equal(calls,scenario==='missing-result'?2:1);
+}
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    subprocess.run(['node', '-e', script], cwd=root, check=True)
+
+
+def test_submission_is_single_flight_and_timeout_does_not_retry():
+    root = Path(__file__).resolve().parents[1]
+    script = r"""
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+ const elements=new Map(),timers=new Map();let calls=0,next=0;
+ const el=id=>{if(!elements.has(id))elements.set(id,{value:'quality',files:[{size:100}],hidden:false});return elements.get(id);};
+ const context={URL,URLSearchParams,AbortController,console,
+  location:{search:'',origin:'https://zema.example'},
+  document:{getElementById:el,body:{classList:{add(){}}}},
+  sessionStorage:{getItem:()=>null},FormData:class{append(){}},
+  setTimeout:(fn,ms)=>{const id=++next;timers.set(id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),
+  window:{addEventListener(){},parent:{}},
+  fetch:(url,options)=>{calls++;assert.equal(options.method,'POST');return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Error('aborted'))));}
+ };
+ vm.createContext(context);vm.runInContext(fs.readFileSync('public/video.js','utf8'),context);
+ vm.runInContext('ready=true;useJobs=true;',context);
+ vm.runInContext("mediaInfo=async()=>({duration:5,width:1280,height:720});",context);
+ const pending=el('renderForm').onsubmit({preventDefault(){}});
+ await el('renderForm').onsubmit({preventDefault(){}});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,1,'Double submit must not duplicate a GPU job');
+ [...timers.values()].find(t=>t.ms===180000).fn();await pending;
+ assert.equal(calls,1,'A timeout must not automatically retry');assert.equal(el('render').disabled,false);
+ assert.match(el('status').textContent,/may have accepted/);assert.equal(timers.size,0);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    subprocess.run(['node', '-e', script], cwd=root, check=True)
+
+
+def test_media_preflight_limits_and_metadata_cleanup():
+    root = Path(__file__).resolve().parents[1]
+    script = r"""
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+ const elements=new Map(),timers=new Map();let next=0,media,revoked=0,cleared=0;
+ const el=id=>{if(!elements.has(id))elements.set(id,{});return elements.get(id);};
+ const context={URL:{createObjectURL:()=> 'blob:local',revokeObjectURL:()=>revoked++},URLSearchParams,AbortController,console,
+  location:{search:'',origin:'https://zema.example'},window:{addEventListener(){},parent:{}},sessionStorage:{getItem:()=>null},
+  setTimeout:(fn)=>{const id=++next;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
+  document:{getElementById:el,body:{classList:{add(){}}},createElement:()=>media={duration:5,videoWidth:1280,videoHeight:720,removeAttribute(){cleared++;},load(){}}}
+ };
+ vm.createContext(context);vm.runInContext(fs.readFileSync('public/video.js','utf8'),context);
+ for(const mode of ['success','decode-error','timeout']){
+  const promise=vm.runInContext("mediaInfo({},'video')",context);
+  if(mode==='success'){media.onloadedmetadata();assert.equal((await promise).duration,5);}
+  else {if(mode==='decode-error')media.onerror();else [...timers.values()][0]();await assert.rejects(promise);}
+  assert.equal(timers.size,0);assert.equal(media.onloadedmetadata,null);assert.equal(media.onerror,null);
+ }
+ assert.equal(revoked,3);assert.equal(cleared,3);
+ const valid={duration:30,width:3840,height:2160};
+ context.videoInfo=valid;context.audioInfo={duration:30};vm.runInContext('validateMedia(videoInfo,audioInfo)',context);
+ for(const [video,audio] of [
+  [valid,{duration:30.1}],[valid,{duration:0}],[{...valid,duration:29},{duration:30}],
+  [{...valid,duration:121},{duration:5}],[{...valid,width:8000},{duration:5}],
+  [{...valid,duration:Infinity},{duration:5}], [valid,{duration:NaN}]
+ ]){context.videoInfo=video;context.audioInfo=audio;assert.throws(()=>vm.runInContext('validateMedia(videoInfo,audioInfo)',context));}
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    subprocess.run(['node', '-e', script], cwd=root, check=True)
