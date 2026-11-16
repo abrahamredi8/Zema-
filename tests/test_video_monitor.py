@@ -75,3 +75,31 @@ for(const scenario of ['missing','expired','unauthorized','unavailable','failed'
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
     subprocess.run(['node', '-e', script], cwd=root, check=True)
+
+
+def test_submission_is_single_flight_and_timeout_does_not_retry():
+    root = Path(__file__).resolve().parents[1]
+    script = r"""
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+ const elements=new Map(),timers=new Map();let calls=0,next=0;
+ const el=id=>{if(!elements.has(id))elements.set(id,{value:'quality',files:[{size:100}],hidden:false});return elements.get(id);};
+ const context={URL,URLSearchParams,AbortController,console,
+  location:{search:'',origin:'https://zema.example'},
+  document:{getElementById:el,body:{classList:{add(){}}}},
+  sessionStorage:{getItem:()=>null},FormData:class{append(){}},
+  setTimeout:(fn,ms)=>{const id=++next;timers.set(id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),
+  window:{addEventListener(){},parent:{}},
+  fetch:(url,options)=>{calls++;assert.equal(options.method,'POST');return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Error('aborted'))));}
+ };
+ vm.createContext(context);vm.runInContext(fs.readFileSync('public/video.js','utf8'),context);
+ vm.runInContext('ready=true;useJobs=true;',context);
+ const pending=el('renderForm').onsubmit({preventDefault(){}});
+ await el('renderForm').onsubmit({preventDefault(){}});
+ assert.equal(calls,1,'Double submit must not duplicate a GPU job');
+ [...timers.values()].find(t=>t.ms===180000).fn();await pending;
+ assert.equal(calls,1,'A timeout must not automatically retry');assert.equal(el('render').disabled,false);
+ assert.match(el('status').textContent,/may have accepted/);assert.equal(timers.size,0);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    subprocess.run(['node', '-e', script], cwd=root, check=True)
