@@ -23,7 +23,14 @@ async function monitor(id){
     const requestHeaders=headers();
     async function checkedFetch(url,consume,timeout=30000){
         const timer=setTimeout(()=>monitorController.abort(),timeout);
-        try{const response=await fetch(url,{headers:requestHeaders,signal});return await consume(response);}
+        try{
+            const response=await fetch(url,{headers:requestHeaders,signal});
+            if(response.status===404||response.status===410){
+                clearJob();el('resume').hidden=true;
+                throw Error('This render is no longer available. It may have expired. Choose your source files to start a new render.');
+            }
+            return await consume(response);
+        }
         finally{clearTimeout(timer);}
     }
     monitoring=true;el('stop').hidden=false;el('progress').hidden=false;
@@ -52,7 +59,7 @@ async function monitor(id){
 el('key').oninput=()=>{stopMonitoring();ready=false;el('render').disabled=true;el('resume').disabled=true;};
 el('check').onclick=async()=>{busy(true);ready=false;try{const response=await fetch('/v1/lipsync/status',{headers:headers()});if(!response.ok)throw Error(await errorText(response));const data=await response.json();useJobs=data.jobs_configured===true;ready=useJobs||data.configured===true;message(ready?(useJobs?'Job service is configured. Submit a short test to verify GPU rendering.':'Short-test engine is configured. Long scenes require the job service.'):'The GPU engine is not connected yet. Your files have not been uploaded.');el('resume').hidden=!useJobs||!savedJob();}catch(error){message(error.message);}finally{busy(false);}};
 el('stop').onclick=()=>{stopMonitoring();el('stop').disabled=true;};
-el('resume').onclick=async()=>{const id=savedJob();if(!id||!ready||!useJobs)return;busy(true);el('stop').disabled=false;try{await monitor(id);}catch(error){message(error.message+' Use Resume to retry checking; this does not submit another render.');}finally{busy(false);}};
+el('resume').onclick=async()=>{const id=savedJob();if(!id||!ready||!useJobs)return;busy(true);el('stop').disabled=false;try{await monitor(id);}catch(error){message(error.message+(savedJob()?' Use Resume to retry checking; this does not submit another render.':''));}finally{busy(false);}};
 el('renderForm').onsubmit=async event=>{
     event.preventDefault();if(!ready)return;
     if(useJobs&&savedJob()){message('A previous render is saved in this tab. Resume it before submitting another job.');el('resume').hidden=false;return;}
