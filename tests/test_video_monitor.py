@@ -94,12 +94,46 @@ const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/st
  };
  vm.createContext(context);vm.runInContext(fs.readFileSync('public/video.js','utf8'),context);
  vm.runInContext('ready=true;useJobs=true;',context);
+ vm.runInContext("mediaInfo=async()=>({duration:5,width:1280,height:720});",context);
  const pending=el('renderForm').onsubmit({preventDefault(){}});
  await el('renderForm').onsubmit({preventDefault(){}});
+ await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls,1,'Double submit must not duplicate a GPU job');
  [...timers.values()].find(t=>t.ms===180000).fn();await pending;
  assert.equal(calls,1,'A timeout must not automatically retry');assert.equal(el('render').disabled,false);
  assert.match(el('status').textContent,/may have accepted/);assert.equal(timers.size,0);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    subprocess.run(['node', '-e', script], cwd=root, check=True)
+
+
+def test_media_preflight_limits_and_metadata_cleanup():
+    root = Path(__file__).resolve().parents[1]
+    script = r"""
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+ const elements=new Map(),timers=new Map();let next=0,media,revoked=0,cleared=0;
+ const el=id=>{if(!elements.has(id))elements.set(id,{});return elements.get(id);};
+ const context={URL:{createObjectURL:()=> 'blob:local',revokeObjectURL:()=>revoked++},URLSearchParams,AbortController,console,
+  location:{search:'',origin:'https://zema.example'},window:{addEventListener(){},parent:{}},sessionStorage:{getItem:()=>null},
+  setTimeout:(fn)=>{const id=++next;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
+  document:{getElementById:el,body:{classList:{add(){}}},createElement:()=>media={duration:5,videoWidth:1280,videoHeight:720,removeAttribute(){cleared++;},load(){}}}
+ };
+ vm.createContext(context);vm.runInContext(fs.readFileSync('public/video.js','utf8'),context);
+ for(const mode of ['success','decode-error','timeout']){
+  const promise=vm.runInContext("mediaInfo({},'video')",context);
+  if(mode==='success'){media.onloadedmetadata();assert.equal((await promise).duration,5);}
+  else {if(mode==='decode-error')media.onerror();else [...timers.values()][0]();await assert.rejects(promise);}
+  assert.equal(timers.size,0);assert.equal(media.onloadedmetadata,null);assert.equal(media.onerror,null);
+ }
+ assert.equal(revoked,3);assert.equal(cleared,3);
+ const valid={duration:30,width:3840,height:2160};
+ context.videoInfo=valid;context.audioInfo={duration:30};vm.runInContext('validateMedia(videoInfo,audioInfo)',context);
+ for(const [video,audio] of [
+  [valid,{duration:30.1}],[valid,{duration:0}],[{...valid,duration:29},{duration:30}],
+  [{...valid,duration:121},{duration:5}],[{...valid,width:8000},{duration:5}],
+  [{...valid,duration:Infinity},{duration:5}], [valid,{duration:NaN}]
+ ]){context.videoInfo=video;context.audioInfo=audio;assert.throws(()=>vm.runInContext('validateMedia(videoInfo,audioInfo)',context));}
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
     subprocess.run(['node', '-e', script], cwd=root, check=True)
