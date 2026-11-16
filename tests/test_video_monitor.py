@@ -40,3 +40,38 @@ for(const reason of ['stop','connection','timeout']){
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
     subprocess.run(['node', '-e', script], cwd=root, check=True)
+
+
+def test_missing_jobs_release_reference_but_temporary_errors_keep_it():
+    root = Path(__file__).resolve().parents[1]
+    script = r"""
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+for(const scenario of ['missing','expired','unauthorized','unavailable','failed','missing-result']){
+ const elements=new Map(),stored=new Map([['zemavoice-last-job','existing-job']]);
+ const element=id=>{if(!elements.has(id))elements.set(id,{value:'key',hidden:false,disabled:false});return elements.get(id);};
+ const codes={missing:404,expired:410,unauthorized:401,unavailable:503};let calls=0;
+ const context={URL,URLSearchParams,AbortController,setTimeout,clearTimeout,console,
+  location:{search:'',origin:'https://zema.example'},
+  document:{getElementById:element,body:{classList:{add(){}}}},
+  sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)},
+  fetch:async(url,options)=>{
+   assert.equal(options.method,undefined,'Monitoring must never resubmit a render');calls++;
+   const status=scenario==='missing-result'?(calls===1?200:404):(codes[scenario]||200);
+   return {status,ok:status===200,json:async()=>status===200?{status:scenario==='failed'?'failed':'succeeded',progress:100}:{detail:'Service error'}};
+  }
+ };
+ context.window={addEventListener(){},parent:{}};
+ vm.createContext(context);vm.runInContext(fs.readFileSync('public/video.js','utf8'),context);
+ vm.runInContext('ready=true;useJobs=true;',context);
+ await element('resume').onclick();
+ const keep=['unauthorized','unavailable'].includes(scenario);
+ assert.equal(stored.has('zemavoice-last-job'),keep,scenario);
+ assert.equal(element('resume').hidden,!keep,scenario);
+ assert.equal(element('render').disabled,false,scenario);
+ assert.equal(element('status').textContent.includes('Use Resume'),keep,scenario);
+ assert.equal(calls,scenario==='missing-result'?2:1);
+}
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    subprocess.run(['node', '-e', script], cwd=root, check=True)
