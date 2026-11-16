@@ -8,8 +8,29 @@ function saveJob(id){el('forget').hidden=false;try{sessionStorage.setItem(storag
 function clearJob(){el('forget').hidden=true;try{sessionStorage.removeItem(storageKey);}catch{}}
 function headers(){return {'x-zemavoice-key':el('key').value};}
 function message(text){el('status').textContent=text;}
-function busy(value){el('render').disabled=value||!ready;el('check').disabled=value;el('key').disabled=value;el('resume').disabled=value||!ready;el('forget').disabled=value;}
+function busy(value){for(const id of ['video','audio','profile'])el(id).disabled=value;el('render').disabled=value||!ready;el('check').disabled=value;el('key').disabled=value;el('resume').disabled=value||!ready;el('forget').disabled=value;}
 async function errorText(response){try{const data=await response.json();return typeof data.detail==='string'?data.detail:'Request failed.';}catch{return 'Request failed (HTTP '+response.status+').';}}
+function mediaInfo(file,kind){return new Promise((resolve,reject)=>{
+    const media=document.createElement(kind),url=URL.createObjectURL(file);
+    let timer;
+    const finish=(error)=>{
+        clearTimeout(timer);media.onloadedmetadata=null;media.onerror=null;
+        const info={duration:media.duration,width:media.videoWidth,height:media.videoHeight};
+        media.removeAttribute('src');media.load();URL.revokeObjectURL(url);
+        if(error)reject(Error(error));else resolve(info);
+    };
+    media.preload='metadata';
+    media.onloadedmetadata=()=>finish();
+    media.onerror=()=>finish('This browser could not read the '+kind+' file. Try MP4 video with H.264 and WAV or MP3 audio.');
+    timer=setTimeout(()=>finish('Reading the '+kind+' file timed out. Try another file.'),15000);
+    media.src=url;
+});}
+function validateMedia(video,audio){
+    if(!Number.isFinite(video.duration)||!Number.isFinite(audio.duration))throw Error('Choose files with a known, finite duration.');
+    if(audio.duration<0.1||audio.duration>30)throw Error('Narration must be between 0.1 and 30 seconds.');
+    if(video.duration>120||video.duration<audio.duration)throw Error('Source video must cover all narration and be at most 120 seconds.');
+    if(!video.width||!video.height||video.width*video.height>3840*2160)throw Error('Choose a video with a picture no larger than 4K.');
+}
 async function showResult(response){if(!response.ok)throw Error(await errorText(response));if(!response.headers.get('content-type')?.startsWith('video/mp4'))throw Error('The server did not return an MP4.');const blob=await response.blob();if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);el('result').src=resultUrl;el('result').hidden=false;el('download').href=resultUrl;el('download').hidden=false;message('Video ready. Play it below and check lip timing, pauses, and the ending.');if(window.parent!==window)window.parent.postMessage({type:'zemavoice-result',kind:'video',url:resultUrl,name:'zemavoice-lipsync.mp4'},location.origin);}
 function stopMonitoring(){monitoring=false;monitorController?.abort();}
 function pauseChecks(signal){return new Promise(resolve=>{
@@ -66,6 +87,12 @@ el('renderForm').onsubmit=async event=>{
     const video=el('video').files[0],audio=el('audio').files[0];if(!video||!audio)return;
     if(video.size+audio.size+65536>40*1024*1024){message('Combined upload is too large. Choose smaller files.');return;}
     submitting=true;busy(true);el('stop').disabled=false;el('result').hidden=true;el('download').hidden=true;
+    message('Checking your files on this device…');
+    try{
+        const videoInfo=await mediaInfo(video,'video');
+        const audioInfo=await mediaInfo(audio,'audio');
+        validateMedia(videoInfo,audioInfo);
+    }catch(error){message(error.message+' Nothing was uploaded.');submitting=false;busy(false);return;}
     message('Uploading… Keep this page open.');
     const uploadController=new AbortController();
     const uploadTimer=setTimeout(()=>uploadController.abort(),useJobs?180000:600000);
